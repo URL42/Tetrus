@@ -23,3 +23,6 @@
 - Gravity tick increases gradually; soft drop via down arrow accelerates tick, hard drop optional but nice-to-have.
 - Tests will target `board` and `tetromino` logic; curses renderer remains thin and manually testable.
 
+## Recent Enhancements
+- Added hold slot, next-piece preview, and ghost overlays without changing the monochrome look.
+- Introduced persistent high scores plus optional sprint/ultra challenge presets selectable via CLI flags.

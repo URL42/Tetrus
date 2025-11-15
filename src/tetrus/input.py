@@ -23,6 +23,8 @@ def interpret_key(key: int) -> Optional[Action]:
         return "soft_drop"
     if key in (ord(" "),):
         return "hard_drop"
+    if key in (ord("c"),):
+        return "hold"
     if key in (ord("p"),):
         return "pause"
     if key in (ord("q"), 27):  # 'q' or ESC

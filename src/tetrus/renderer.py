@@ -12,7 +12,7 @@ from .constants import (
     EMPTY_GLYPH,
     TETROMINO_GLYPH,
 )
-from .tetromino import Tetromino
+from .tetromino import TETROMINO_SHAPES, Tetromino
 
 
 class Renderer:
@@ -27,8 +27,9 @@ class Renderer:
         self._controls = [
             "←/h : move left",
             "→/l : move right",
-            "↑/x : rotate",
+            "↑/x : rotate CW",
             "z   : rotate CCW",
+            "c   : hold piece",
             "↓   : soft drop",
             "space: hard drop",
             "p   : pause",
@@ -49,8 +50,27 @@ class Renderer:
         score: int,
         level: int,
         total_lines: int,
+        *,
+        next_piece: Optional[Tetromino],
+        held_kind: Optional[str],
+        best_score: int,
+        mode_name: str,
+        sprint_target: Optional[int],
+        elapsed: float,
+        time_remaining: Optional[float],
     ) -> None:
-        hud_lines = self._hud_lines(score, level, total_lines)
+        hud_lines = self._hud_lines(
+            score,
+            level,
+            total_lines,
+            best_score,
+            mode_name,
+            sprint_target,
+            elapsed,
+            time_remaining,
+            next_piece.kind if next_piece is not None else None,
+            held_kind,
+        )
         if not self._fits_screen(hud_lines):
             self._draw_resize_message()
             self.stdscr.refresh()
@@ -72,7 +92,8 @@ class Renderer:
             for x, cell in enumerate(row):
                 if cell is None:
                     continue
-                self._draw_cell(x, y, TETROMINO_GLYPH, solid=True)
+                glyph = cell if isinstance(cell, str) else TETROMINO_GLYPH
+                self._draw_cell(x, y, glyph, solid=True)
 
     def _draw_piece(self, piece: Tetromino, solid: bool) -> None:
         glyph = TETROMINO_GLYPH if solid else ".."
@@ -135,18 +156,77 @@ class Renderer:
         for offset, text in hud_lines:
             self.stdscr.addstr(self._playfield_origin_y + offset, origin_x, text, attr)
 
-    def _hud_lines(self, score: int, level: int, total_lines: int) -> list[tuple[int, str]]:
-        lines: list[tuple[int, str]] = [
-            (0, "Tetrus"),
-            (2, f"Score: {score}"),
-            (3, f"Level: {level}"),
-            (4, f"Lines: {total_lines}"),
-            (6, "Controls:"),
-        ]
-        base = 7
-        for idx, line in enumerate(self._controls):
-            lines.append((base + idx, line))
+    def _hud_lines(
+        self,
+        score: int,
+        level: int,
+        total_lines: int,
+        best_score: int,
+        mode_name: str,
+        sprint_target: Optional[int],
+        elapsed: float,
+        time_remaining: Optional[float],
+        next_kind: Optional[str],
+        held_kind: Optional[str],
+    ) -> list[tuple[int, str]]:
+        lines: list[tuple[int, str]] = []
+        cursor = 0
+        lines.append((cursor, "Tetrus"))
+        cursor += 2
+        lines.append((cursor, f"Mode : {mode_name}"))
+        cursor += 1
+        lines.append((cursor, f"Score: {score}"))
+        cursor += 1
+        lines.append((cursor, f"Best : {best_score}"))
+        cursor += 1
+        lines.append((cursor, f"Level: {level}"))
+        cursor += 1
+        if sprint_target is not None:
+            lines.append((cursor, f"Lines: {total_lines}/{sprint_target}"))
+        else:
+            lines.append((cursor, f"Lines: {total_lines}"))
+        cursor += 1
+        duration = time_remaining if time_remaining is not None else elapsed
+        label = "Time left" if time_remaining is not None else "Time"
+        lines.append((cursor, f"{label}: {self._format_duration(duration)}"))
+        cursor += 2
+
+        lines.append((cursor, "Next:"))
+        cursor += 1
+        for block in self._mini_piece_lines(next_kind):
+            lines.append((cursor, block))
+            cursor += 1
+        cursor += 1
+
+        lines.append((cursor, "Hold:"))
+        cursor += 1
+        for block in self._mini_piece_lines(held_kind):
+            lines.append((cursor, block))
+            cursor += 1
+        cursor += 1
+
+        lines.append((cursor, "Controls:"))
+        cursor += 1
+        for line in self._controls:
+            lines.append((cursor, line))
+            cursor += 1
         return lines
+
+    def _mini_piece_lines(self, kind: Optional[str]) -> list[str]:
+        size = 4
+        grid = [[EMPTY_GLYPH for _ in range(size)] for _ in range(size)]
+        if kind is not None:
+            offsets = TETROMINO_SHAPES[kind][0]
+            min_x = min(ox for ox, _ in offsets)
+            min_y = min(oy for _, oy in offsets)
+            for ox, oy in offsets:
+                grid[oy - min_y][ox - min_x] = TETROMINO_GLYPH
+        return ["".join(row) for row in grid]
+
+    def _format_duration(self, seconds: float) -> str:
+        total_seconds = max(0, int(seconds))
+        minutes, secs = divmod(total_seconds, 60)
+        return f"{minutes:02d}:{secs:02d}"
 
     def _fits_screen(self, hud_lines: list[tuple[int, str]]) -> bool:
         max_y, max_x = self.stdscr.getmaxyx()
